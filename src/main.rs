@@ -2,16 +2,16 @@
 
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::thread;
-use std::io::{Read, Write};
+use std::io::{Read, Write, BufReader, BufRead};
 use std::fs;
 use std::time::Instant;
 use server_side::{decode_from_base64, process_input_file};
 use env_logger::{Builder, Env};
-use log::{info, error};
+use log::{error};
 
 fn init_logger(){
     let env = Env::default()
-        .filter("info");
+        .filter("println");
 
     Builder::from_env(env)
         .format_level(false)
@@ -23,13 +23,14 @@ fn main() {
     // Initialize a logger
     init_logger();
     
-    std::env::set_var("RUST_LOG", "info");
+    std::env::set_var("RUST_LOG", "println");
 
     let branches = vec![
         "ALBNM",
         "CTONGA"
     ];
-    
+    start_listening("127.0.0.1:8080");
+
     // Create a folder called "data" if it does not exist
     let output_dir = "data/data/weekly_summary";
     if !fs::metadata(&output_dir).is_ok() {
@@ -45,7 +46,6 @@ fn main() {
         }
     }
    
-    start_listening("127.0.0.1:8080");
 
     
     let duration = start.elapsed();
@@ -57,12 +57,15 @@ fn main() {
 fn start_listening(server_address: &str) {
     let listener = TcpListener::bind(server_address)
         .expect("Failed to bind to the server");
-    info!("Server listening on port {}" , server_address);
+    println!("Server listening on port {}" , server_address);
 
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+
+                let client_address = stream.peer_addr().expect("Failed to get the client address");
+                println!("Accepted connection from a client, with IP address: {} ", client_address);
                 // Spawn a new thread to handle the client
                 thread::spawn(|| handle_client(stream));
             }
@@ -74,13 +77,36 @@ fn start_listening(server_address: &str) {
 }
 
 fn handle_client(mut stream : TcpStream){
+    println!("Starting to handle the client");
     // Read branch code from the client
-    let mut branch_code = String::new();
-    if let Err(e)  = stream.read_to_string(&mut branch_code){
-        error!("Error reading branch code: {:?}", e);
+    // let mut buffer = String::new();
+    // if let Err(e) = stream.read_to_string(&mut buffer) {
+    //     println!("Error reading branch code: {:?}", e);
+    //     return;
+    // }else {
+    //     println!("The branch code is: {:?}", buffer);
+    // };
+    let mut buffer = Vec::new();
+    if let Err(e) = stream.read_to_end(&mut buffer) {
+        eprintln!("Error reading branch code: {:?}", e);
         return;
+    }
+
+    // Process the branch code
+    let branch_code = String::from_utf8_lossy(&buffer);
+    println!("Received branch code: {}", branch_code);
+
+    if buffer.is_empty(){
+        println!("Error, received empty code from client")
+    }else {
+        println!("Not empty")
     };
-    info!("Received branch code {} ", branch_code);
+
+    // if let Err(e) = buf_code.lines(){
+    //     error!("Error reading branch code: {:?}", e);
+    //     return;
+    // };
+
 
     // Create a folder for the branch in the "data" directory
     let branch_folder = format!("data/{}", branch_code.trim());
@@ -90,7 +116,7 @@ fn handle_client(mut stream : TcpStream){
     };
 
     // Send acknowledgment to the client
-    if let Err(e) = stream.write(b"OK") {
+    if let Err(e) = stream.write_all(b"OK") {
         error!("Error writing acknowledgment to stream: {:?}", e);
         return;
     };
@@ -101,7 +127,7 @@ fn handle_client(mut stream : TcpStream){
         error!("Error reading Base64 content: {:?}", e);
         return;
     };
-    info!("Received Base64 content");
+    println!("Received Base64 content");
 
     
     // Remove the "~" from the beginning and end of the Base64 content
@@ -122,7 +148,7 @@ fn handle_client(mut stream : TcpStream){
         error!("Error writing to file: {:?}", e);
         return;
     };
-    info!("Sales report file saved successfully");
+    println!("Sales report file saved successfully");
 
     //  Send acknowledgment to the client and close the connection
     if let Err(e) = stream.write(b"OK") {
