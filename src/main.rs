@@ -1,5 +1,3 @@
-
-
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::thread;
 use std::io::{Read, Write, BufReader, BufRead};
@@ -46,7 +44,6 @@ fn main() {
         }
     }
    
-
     
     let duration = start.elapsed();
     println!("Processing time: {:?}", duration);
@@ -79,37 +76,39 @@ fn start_listening(server_address: &str) {
 fn handle_client(mut stream : TcpStream){
     println!("Starting to handle the client");
     // Read branch code from the client
-    // let mut buffer = String::new();
-    // if let Err(e) = stream.read_to_string(&mut buffer) {
+    // let mut branch_code_buffer = String::new();
+    // if let Err(e) = stream.read_to_string(&mut branch_code_buffer) {
     //     println!("Error reading branch code: {:?}", e);
     //     return;
     // }else {
-    //     println!("The branch code is: {:?}", buffer);
+    //     println!("The branch code is: {:?}", branch_code_buffer);
     // };
-    let mut buffer = Vec::new();
-    if let Err(e) = stream.read_to_end(&mut buffer) {
+
+        let mut branch_length_buff = [0; 4];
+        stream.read_exact(&mut branch_length_buff).expect("Failed to read length");
+        let length = u32::from_be_bytes(branch_length_buff);
+
+
+    let mut branch_code_buffer = vec![0; length as usize];
+    if let Err(e) = stream.read_exact(&mut branch_code_buffer) {
         eprintln!("Error reading branch code: {:?}", e);
         return;
     }
 
     // Process the branch code
-    let branch_code = String::from_utf8_lossy(&buffer);
+    let branch_code = String::from_utf8_lossy(&branch_code_buffer);
     println!("Received branch code: {}", branch_code);
 
-    if buffer.is_empty(){
+
+    if branch_code_buffer.is_empty(){
         println!("Error, received empty code from client")
     }else {
         println!("Not empty")
     };
 
-    // if let Err(e) = buf_code.lines(){
-    //     error!("Error reading branch code: {:?}", e);
-    //     return;
-    // };
-
 
     // Create a folder for the branch in the "data" directory
-    let branch_folder = format!("data/{}", branch_code.trim());
+    let branch_folder = format!("data/{}", branch_code);
     if let Err(e) = fs::create_dir_all(&branch_folder){
         error!("Error creating branch folder: {:?}", e);
         return;
@@ -127,7 +126,7 @@ fn handle_client(mut stream : TcpStream){
         error!("Error reading Base64 content: {:?}", e);
         return;
     };
-    println!("Received Base64 content");
+    println!("Received Base64 content: {}", base64_content);
 
     
     // Remove the "~" from the beginning and end of the Base64 content
@@ -143,11 +142,11 @@ fn handle_client(mut stream : TcpStream){
     };
 
     // Save decoded content to a file
-    let file_path = format!("{}/branch_weekly_sales.txt", branch_folder);
-    if let Err(e) = fs::write(file_path, &decoded_content) {
-        error!("Error writing to file: {:?}", e);
-        return;
-    };
+    // let file_path = format!("{}/branch_weekly_sales.txt", branch_folder);
+    // if let Err(e) = fs::write(file_path, &decoded_content) {
+    //     error!("Error writing to file: {:?}", e);
+    //     return;
+    // };
     println!("Sales report file saved successfully");
 
     //  Send acknowledgment to the client and close the connection
