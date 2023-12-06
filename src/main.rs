@@ -106,7 +106,7 @@ fn handle_client(mut stream : TcpStream){
         println!("Not empty")
     };
 
-
+    
     // Create a folder for the branch in the "data" directory
     let branch_folder = format!("data/{}", branch_code);
     if let Err(e) = fs::create_dir_all(&branch_folder){
@@ -114,18 +114,36 @@ fn handle_client(mut stream : TcpStream){
         return;
     };
 
+    println!("Sending acknowledgement to client");
     // Send acknowledgment to the client
     if let Err(e) = stream.write_all(b"OK") {
         error!("Error writing acknowledgment to stream: {:?}", e);
         return;
     };
+    println!("Acknowldegment sent");
 
+    if let Err(e) = stream.flush() {
+        eprintln!("Error flushing stream: {:?}", e);
+        return;
+    }
+    
+    println!("Reading Base64 content");
     // Receive Base64 content from client
-    let mut base64_content = String::new();
-    if let Err(e) = stream.read_to_string(&mut base64_content) {
+    // Read base64 content length.
+    let mut base64_cont_lenth = [0; 4];
+    stream.read_exact(&mut base64_cont_lenth).expect("Failed to read Base64 length");
+    let lenght = u32::from_be_bytes(base64_cont_lenth);
+
+    let mut base64_buffer = vec![0; lenght as usize];
+    
+
+    // let mut base64_content = String::new();
+    if let Err(e) = stream.read_exact(&mut base64_buffer) {
         error!("Error reading Base64 content: {:?}", e);
         return;
     };
+
+    let base64_content = String::from_utf8_lossy(&base64_buffer);
     println!("Received Base64 content: {}", base64_content);
 
     
